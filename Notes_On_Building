@@ -1,0 +1,136 @@
+This note is just a bunch of notes I (Jeremy Hunt) took while building the Linux environment for the r-two robots. Most of the information I gathered from here:
+http://www.at91.com/linux4sam/bin/view/Linux4SAM/GettingStarted
+
+or by Googling small things.
+
+AT91 Bootloader:
+This is mostly as they say on the website. Just make sure to select the SD card configuration if you are building for use on an SD card.
+
+U-Boot:
+This has been one of the weirder ones. Here are some thoughts:
+1. Make sure to select the SD card configuration if you are building for the SD card. There is no menuconfig, so essentially all the build information is stored in a file in the Boards directory, along with the listing for the board in boards.cfg. For instance, the SD card build of the sama5d3xek board looks like this:
+
+# Target                     ARCH        CPU         Board name          Vendor	        SoC         Options
+sama5d3xek_sdcard	     arm         armv7       sama5d3xek          atmel          at91        sama5d3xek:SAMA5D3,SYS_USE_MMC
+
+Which basically says that this is an arm, armv7 based board called the sama5d3xek in the boards folder in a folder called atmel (the vendor) in the at91 series SoCs with the options sama5d3xek:SAMA5D3,SYS_USE_MMC, which is built into a configuration header file (in include/config.h) that looks like this:
+/* Automatically generated - do not edit */
+#define CONFIG_SAMA5D3	1
+#define CONFIG_SYS_USE_MMC	1
+#define CONFIG_SYS_ARCH  "arm"
+#define CONFIG_SYS_CPU   "armv7"
+#define CONFIG_SYS_BOARD "sama5d3xek"
+#define CONFIG_SYS_VENDOR "atmel"
+#define CONFIG_SYS_SOC    "at91"
+#define CONFIG_BOARDDIR board/atmel/sama5d3xek
+#include <config_cmd_defaults.h>
+#include <config_defaults.h>
+#include <configs/sama5d3xek.h>
+#include <asm/config.h>
+#include <config_fallbacks.h>
+#include <config_uncmd_spl.h>
+
+
+2. Editing the default boot args and boot command. This was the hardest part to find, since it wasn't really documented. Essentially, the environment varibles in U-Boot are saved into the binary of U-Boot. They are defined in this file:
+include/configs/sama5d3xek.h
+
+This is where you define things like where the root file system is stored, what format it is in, what the name of the kernal image is, etc.
+
+3. The "source" command and U-Boot scripts. U-Boot supports running scripts, but the documented command is "autoscr". This is wrong. The real command name is "source". Furthermore, this command must be enabled by defining the "CONFIG_CMD_SOURCE" symbol somewhere (for instance in the sama5d3xek.h file for instance). This command will probably aid in creating seperate configurations for each robot. Essentially what you would need to do is to create the configuration file for each robot (containing things like ID, MAC address, light sensor configs, etc...) then place that as a script file on the robot (it needs to be compiled aparently using mkimg) then loading it using fatload, and running it using source.
+
+4. Ethernet Addresses: I have added a 
+#define CONFIG_ENV_ETHADDR "e2:d8:33:47:32:00"
+to the include/configs/sama5d3xek.h file in order to allow for a constant default Ethernet address.
+This is parsed by the MACB driver on startup and stored into the SAMA5D3x Ethernet module's registers. This sets the Ethernet address, and allows the operating system to take the MAC address from this hardware register and use it. This way the ethernet address does not need to be passed in via the bootargs. However, it is passed in as a bootarg I added called "hwaddr", so it will show up as an environment variable. The path the system takes to set the ethernet address is complex, but much of it resides in macb.c, and the net/ folder. 
+
+
+The Linux Kernel:
+
+1. Make sure the U-Boot tools are in the system path. (i.e. u-boot/tools is either in the system path or the files in it are symlinked to a place in the path). You can also just install another copy of the U-Boot tools by doing "sudo apt-get install u-boot-tools".
+
+2. In order to support SD cards, some finagling has to be done. Most of the information is documented here:
+http://www.at91.com/linux4sam/bin/view/Linux4SAM/SDCardBootNotice
+
+Make sure to use the correct (SD card specific configurations) for the various bootloaders like U-Boot.
+Currently we are also using EXT4 as the main root file system on the SD card. In order to do this we need
+the kernel to be configured to boot to such a file system. There are 3 configurations you need to set for
+this:
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_XATTR=y
+CONFIG_LBDAF=y
+
+Find these in the .config file and edit them so they are as listed (you may not find 1+ of them, just add them to the end if you can't find them).
+Once you add them, run 
+make ARCH=arm menuconfig
+
+again and exit(save) immediately to automatically set up other variables so you don't have to do it at build time.
+
+
+
+Setting Up Eclipse:
+Follow (approximately) these directions:
+http://wiki.eclipse.org/HowTo_use_the_CDT_to_navigate_Linux_kernel_source
+
+One thing I needed to add is the build chain's standard C include files (e.g. stdint.h, stdarg.h, etc). Note that this is NOT adding the C standard library, but rather just the header files.
+To do this, in the
+Properties->"C/C++ General"->"Paths and Symbols"->"Includes" Tab
+
+Add two include directories at the top
+<PATH-TO-TOOLCHAIN-INSTALL>/lib/gcc/<TOOLCHAIN-NAME>/<TOOLCHAIN-VERSION>/include
+<PATH-TO-TOOLCHAIN-INSTALL>/lib/gcc/<TOOLCHAIN-NAME>/<TOOLCHAIN-VERSION>/include-fixed
+
+Then rebuild, which takes forever.
+
+
+Buildroot:
+Buildroot is the main build system; the big kahoona. It builds the "root file system" which is essentially everything you see in a linux system when you boot up and see the '/' directory. It is what the kernel mounts onto at boot and it contains all of the programs and everything useful.
+In addition to building everyting for the linux file system on the target device, it also builds a tool-chain that will build programs that will run on the device, so if you need to build a program for the target, you will need the toolchain that is spit out by this guy. The tool chain it creates is based on GCC and is called something like 
+arm-buildroot-linux-uclibcgnueabi
+. 
+Note that the default setup for the sama5d3xek uses uClibc as the standard library rather than glibc. In addition, the file format it runs is a variant of elf that is simplified. This complicates life considerably.
+
+1. Problems with GCC and its dumb info system: GCC wants to build documentation and info packages several times throughout the build process. They are all specified using TeX and would normally be fine... except that they use depricated and now (since makeinfo 5) error producing. So whenever you try to build the documentation on a system with makeinfo (TeXinfo) that is up to date, GCC will fail to build. Dumb dumb dumb. And took the longest to figure out.
+
+More info here:
+https://dev.openwrt.org/ticket/13039
+
+
+Fixing it:
+a. Run make menuconfig, etc and go into the toolchain settings and edit the 
+"Additional gcc options"
+to add " MAKEINFO=missing" or " MAKEINFO=/bin/false"
+This manually tells GCC not compile the info documents
+
+2. Problems with GCC and its poor quality control: GCC bootstraps itself during the build process by first building itself using the systems gcc/g++/cpp commands, then using that build to build another build, then using that build to build the final cross-compile build, then using that build to build the build for the target. It's the most disgusting system I can imagine, but I guess it really tests all the bugs... except when it doesn't.
+
+GCC 4.8 has a bug in it in that there are VERY subtle instances when just doesn't do the right thing. What this means in this instance is that the first bootstrap build of GCC 4.7 for the toolchain is built with a bug in it causing the second build to fail with a segmentation fault... Nasty. Read more about it here:
+http://gcc.gnu.org/bugzilla/show_bug.cgi?id=57625
+(Interestingly enough this guy also mentions the error in 2...)
+This may be more relevant.
+http://gcc.gnu.org/@/bugzilla/show_bug.cgi?id=56927
+
+Fixing it:
+Essentially we need to use a system that uses GCC 4.7 so that we don't have any "GCC4.8 can't compile GCC4.7" ridiculousness. The GCC team should probably test their shit better.... So we have two options:
+a. The preferable way is to switch to a system that doesn't use GCC 4.8 as the default. Ubuntu 12.04 LTS should do. I'm a dummy though and installed 13.10.
+b. Install g++-4.7/gcc-4.7/cpp-4.7 using "sudo apt-get install gcc-4.7" etc. Then switch them to the preferred g++/gcc/cpp using the "update-alternatives" command. More about this here:
+http://askubuntu.com/questions/78253/is-it-possible-to-downgrade-gcc-4-6-1-to-4-4-x
+and here:
+http://stackoverflow.com/questions/7832892/how-to-change-the-default-gcc-compiler-in-ubuntu
+
+3. Now there's a second segfault bug! Turns out that 4.7.2 has a bug in it where it ALSO segfaults in the SAME PLACE (though for different reasons). You can either apply the patch found here:
+http://gcc.gnu.org/@/bugzilla/show_bug.cgi?id=56927
+Or use a different version like 4.7.3 or the nightly build. I tried out the nightly because it was easy and it seems to maybe be working?
+
+
+Poky:
+I still can't figure this one out.... It is broken in strange, mysterious, and numerous ways. Defs should be done though.
+
+
+
+
+
+Modules:
+I'm mostly following the instructions in the Linux Device Drivers book (can be found online for free). Updated versions of the kernel modules can be found here:
+https://github.com/martinezjavier/ldd3
+
+TODO: Document this more.
