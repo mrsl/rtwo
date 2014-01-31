@@ -3,7 +3,7 @@
 	<name>kernel_hello_module</name>
 	<comment></comment>
 	<projects>
-		<project>at91-linux</project>
+		<project>linux-at91</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
