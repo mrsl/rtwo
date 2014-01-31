@@ -1,0 +1,9 @@
+# Build files for kernel modules
+*~
+.tmp_versions/
+.*.cmd
+*.mod.c
+core
+.depend
+*.o
+*.ko

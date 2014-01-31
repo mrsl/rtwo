@@ -1,1 +1,0 @@
-cmd_/home/mrsl/rtwo_linux/hello_module/src/kernel_hello_module.ko := arm-none-linux-gnueabi-ld -EL -r  -T /home/mrsl/rtwo_linux/linux-at91/scripts/module-common.lds --build-id  -o /home/mrsl/rtwo_linux/hello_module/src/kernel_hello_module.ko /home/mrsl/rtwo_linux/hello_module/src/kernel_hello_module.o /home/mrsl/rtwo_linux/hello_module/src/kernel_hello_module.mod.o
