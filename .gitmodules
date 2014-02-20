@@ -1,0 +1,18 @@
+[submodule "buildroot-at91"]
+	path = buildroot-at91
+	url = https://github.com/linux4sam/buildroot-at91.git
+[submodule "at91bootstrap"]
+	path = at91bootstrap
+	url = https://github.com/linux4sam/at91bootstrap.git
+[submodule "u-boot-at91"]
+	path = u-boot-at91
+	url = https://github.com/linux4sam/u-boot-at91.git
+[submodule "linux-at91"]
+	path = linux-at91
+	url = https://github.com/linux4sam/linux-at91.git
+[submodule "poky"]
+	path = poky
+	url = git://git.yoctoproject.org/poky
+[submodule "poky/meta-atmel"]
+	path = poky/meat-atmel
+	url = git clone http://github.com/linux4sam/meta-atmel
